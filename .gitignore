@@ -1,0 +1,14 @@
+.env
+.env.local
+.DS_Store
+node_modules/
+data/history.jsonl
+data/context.jsonl
+data/context.json
+data/context_embeddings.json
+data/glossary.json
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-store/
+dist/

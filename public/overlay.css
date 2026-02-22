@@ -1,0 +1,53 @@
+:root {
+  --subtitle-text-color: #ffffff;
+  --subtitle-bg-rgba: rgba(0, 0, 0, 0.78);
+  --subtitle-font-size-px: 32px;
+  --subtitle-bottom-px: 12px;
+  --subtitle-radius-px: 10px;
+}
+
+html,
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  font-family: "Noto Sans", "Helvetica Neue", "Yu Gothic", sans-serif;
+}
+
+.overlay-root {
+  position: absolute;
+  left: 50%;
+  bottom: var(--subtitle-bottom-px);
+  transform: translateX(-50%);
+  width: min(96vw, 1600px);
+  display: grid;
+  gap: 8px;
+}
+
+.subtitle-line {
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+  color: var(--subtitle-text-color);
+  background: var(--subtitle-bg-rgba);
+  border-radius: var(--subtitle-radius-px);
+  padding: 10px 14px;
+  line-height: 1.45;
+  font-size: var(--subtitle-font-size-px);
+  letter-spacing: 0.01em;
+  text-shadow: 0 2px 3px rgba(0, 0, 0, 0.6);
+  animation: fade-in 120ms ease-out;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

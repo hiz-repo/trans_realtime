@@ -1,0 +1,23 @@
+{
+  "name": "trans-realtime",
+  "version": "0.1.0",
+  "description": "Realtime subtitle translator with Electron overlay, context memory, and glossary support",
+  "private": false,
+  "license": "MIT",
+  "type": "module",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "env -u ELECTRON_RUN_AS_NODE electron .",
+    "start:web": "node server.js"
+  },
+  "engines": {
+    "node": ">=18.17.0"
+  },
+  "devDependencies": {
+    "dotenv": "^17.3.1",
+    "electron": "^31.7.7",
+    "jszip": "^3.10.1",
+    "mammoth": "^1.10.0",
+    "pdf-parse": "^1.1.1"
+  }
+}
