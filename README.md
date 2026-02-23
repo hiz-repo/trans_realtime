@@ -9,6 +9,7 @@
 - context索引: `data/context.jsonl` にローカル保存（複数ファイル蓄積）
 - context埋め込み索引: `data/context_embeddings.json` にローカル保存
 - glossary: `data/glossary.json` にローカル保存
+- API設定: `data/runtime_config.json` にローカル保存
 - モード: `低遅延` / `高精度`
 - 表示改善: 文字起こし断片を文単位にまとめて翻訳（細切れ字幕を抑制）
 - 多言語: UIで入力言語/出力言語を選択可能
@@ -17,17 +18,18 @@
 ## 要件
 
 - Node.js 18.17+
-- OpenAI APIキー
-- （任意）埋め込みモデルを変える場合は `OPENAI_EMBEDDING_MODEL`
+- OpenAI APIキー（UIまたは `.env` で設定）
 
 ## セットアップ
 
 ```bash
 cp .env.example .env
-# .env を編集して OPENAI_API_KEY を設定
 npm install
 npm start
 ```
+
+起動後に `API設定` パネルから API Key / Base URL / モデルを保存できます。  
+初期値として `.env` の値を読み込み、UIから保存すると `data/runtime_config.json` が優先されます。
 
 `npm start` で以下が同時に起動します。
 - ローカルAPIサーバー (`127.0.0.1:3000`)
@@ -53,6 +55,7 @@ npm start
 - `Context File` は `追加` で蓄積され、一覧から有効/無効や個別削除ができます。
 - `Context File` で読み込んだ内容は `内容を表示` からUI上でページ送り確認できます（有効まとめ表示/個別表示）。
 - `Glossary` で用語対訳を追加し、有効/無効・削除ができます（翻訳時に優先反映）。
+- `API設定` で OpenAI API Key / Base URL / 翻訳モデル / 埋め込みモデル / 音声認識モデルを保存できます。
 - 翻訳時に直近の字幕履歴を自動参照し、文脈整合性を上げています。
 - `contextを音声認識に利用` と `contextを翻訳に利用` を個別にON/OFFできます。
 - `マイク入力` でレベルメーターと状態（待機/入力待機中/音声検出/ノイズ除外）を確認できます。
@@ -72,6 +75,11 @@ npm start
 - `POST /api/translate`
   - 入力: `{ transcript, mode, sourceLanguage, targetLanguage, ignoreFillers, useContextForTranslation }`
   - 出力: `{ createdAt, mode, sourceLanguage, targetLanguage, ignoreFillers, usedContext, transcript, translation }`
+- `GET /api/runtime-config`
+  - 出力: `{ hasOpenaiApiKey, openaiApiKeyMasked, openaiBaseUrl, openaiTranslationModel, openaiEmbeddingModel, openaiTranscribeLowModel, openaiTranscribeHighModel }`
+- `POST /api/runtime-config`
+  - 入力: `{ openaiApiKey?, openaiBaseUrl?, openaiTranslationModel?, openaiEmbeddingModel?, openaiTranscribeLowModel?, openaiTranscribeHighModel? }`
+  - 出力: `GET /api/runtime-config` と同等
 - `GET /api/context`
   - 出力: `{ loaded, totalCount, activeCount, activeIds, items, ... }`
   - `GET /api/context?view=preview&contextId=__active__&start=0&limit=3200` でcontext本文プレビュー取得
@@ -100,7 +108,7 @@ npm start
 
 ## メモ
 
-- APIキーはサーバー側のみで保持され、レンダラーには渡しません。
+- APIキーはサーバー側のみで保持され、UIにはマスク済み状態のみ返します。
 - オーバーレイウィンドウはクリック透過です。
 - macOSでは初回マイク権限の許可が必要です。
 - `npm start` は `ELECTRON_RUN_AS_NODE` を自動でunsetして起動します。

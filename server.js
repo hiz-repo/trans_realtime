@@ -9,15 +9,12 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
-const OPENAI_TRANSLATION_MODEL = process.env.OPENAI_TRANSLATION_MODEL || 'gpt-4.1-mini';
-const OPENAI_EMBEDDING_MODEL = process.env.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small';
 const HISTORY_FILE = path.join(__dirname, 'data', 'history.jsonl');
 const CONTEXT_JSONL_FILE = path.join(__dirname, 'data', 'context.jsonl');
 const LEGACY_CONTEXT_FILE = path.join(__dirname, 'data', 'context.json');
 const CONTEXT_EMBEDDINGS_FILE = path.join(__dirname, 'data', 'context_embeddings.json');
 const GLOSSARY_FILE = path.join(__dirname, 'data', 'glossary.json');
+const RUNTIME_CONFIG_FILE = path.join(__dirname, 'data', 'runtime_config.json');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const MAX_CONTEXT_FILE_BYTES = 20 * 1024 * 1024;
 const CONTEXT_CHUNK_CHARS = 680;
@@ -29,11 +26,14 @@ const CONTEXT_EMBEDDING_BATCH_SIZE = 32;
 const CONTEXT_EMBEDDING_DIMENSIONS = 512;
 const GLOSSARY_MAX_ITEMS = 400;
 const RECENT_TRANSLATION_MAX = 8;
-
-const TRANSCRIBE_MODELS = {
-  low_latency: process.env.OPENAI_TRANSCRIBE_LOW_MODEL || 'gpt-4o-mini-transcribe',
-  high_accuracy: process.env.OPENAI_TRANSCRIBE_HIGH_MODEL || 'gpt-4o-transcribe'
-};
+const DEFAULT_RUNTIME_CONFIG = Object.freeze({
+  openaiApiKey: '',
+  openaiBaseUrl: 'https://api.openai.com/v1',
+  openaiTranslationModel: 'gpt-4.1-mini',
+  openaiEmbeddingModel: 'text-embedding-3-small',
+  openaiTranscribeLowModel: 'gpt-4o-mini-transcribe',
+  openaiTranscribeHighModel: 'gpt-4o-transcribe'
+});
 const SUPPORTED_LANGUAGE_CODES = new Set(['auto', 'ja', 'en', 'zh', 'ko', 'es', 'fr', 'de', 'it', 'pt']);
 const LANGUAGE_NAMES = {
   auto: 'auto-detected language',
@@ -76,20 +76,23 @@ const CONTEXT_MIME_BY_EXT = {
   '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
 };
 
+let runtimeConfig = createRuntimeConfigFromEnv();
 let contextLibrary = createEmptyContextLibrary();
 let contextEmbeddingsStore = createEmptyContextEmbeddingsStore();
 let glossaryLibrary = createEmptyGlossaryLibrary();
 const recentTranslationMemory = [];
 const queryEmbeddingCache = new Map();
 
-if (!OPENAI_API_KEY) {
-  console.warn('[WARN] OPENAI_API_KEY is not set. API requests will fail until you set it.');
-}
-
 export async function startServer(options = {}) {
   const port = Number(options.port || process.env.PORT || 3000);
   const host = options.host || process.env.HOST || '127.0.0.1';
   await mkdir(path.join(__dirname, 'data'), { recursive: true });
+  await loadPersistedRuntimeConfig().catch((error) => {
+    console.warn('[WARN] Failed to load persisted runtime config:', error?.message || error);
+  });
+  if (!runtimeConfig.openaiApiKey) {
+    console.warn('[WARN] OPENAI_API_KEY is not set. API requests will fail until you set it.');
+  }
   await loadPersistedContext().catch((error) => {
     console.warn('[WARN] Failed to load persisted context:', error?.message || error);
   });
@@ -106,6 +109,16 @@ export async function startServer(options = {}) {
 
       if (req.method === 'POST' && req.url === '/api/translate') {
         await handleTranslate(req, res);
+        return;
+      }
+
+      if (req.method === 'GET' && req.url?.startsWith('/api/runtime-config')) {
+        await handleGetRuntimeConfig(res);
+        return;
+      }
+
+      if (req.method === 'POST' && req.url === '/api/runtime-config') {
+        await handleSetRuntimeConfig(req, res);
         return;
       }
 
@@ -187,7 +200,7 @@ if (isMainModule()) {
 }
 
 async function handleTranscribe(req, res) {
-  if (!OPENAI_API_KEY) {
+  if (!runtimeConfig.openaiApiKey) {
     json(res, 500, { error: 'OPENAI_API_KEY is not configured on server.' });
     return;
   }
@@ -223,7 +236,7 @@ async function handleTranscribe(req, res) {
 }
 
 async function handleTranslate(req, res) {
-  if (!OPENAI_API_KEY) {
+  if (!runtimeConfig.openaiApiKey) {
     json(res, 500, { error: 'OPENAI_API_KEY is not configured on server.' });
     return;
   }
@@ -282,6 +295,25 @@ async function handleTranslate(req, res) {
     await appendHistory(record);
   }
   json(res, 200, record);
+}
+
+async function handleGetRuntimeConfig(res) {
+  json(res, 200, buildRuntimeConfigResponse());
+}
+
+async function handleSetRuntimeConfig(req, res) {
+  const body = await readJson(req);
+  const nextConfig = applyRuntimeConfigPatch(body);
+  runtimeConfig = nextConfig;
+  queryEmbeddingCache.clear();
+  contextEmbeddingsStore.model = runtimeConfig.openaiEmbeddingModel;
+  await persistRuntimeConfig();
+
+  if (!runtimeConfig.openaiApiKey) {
+    console.warn('[WARN] OPENAI_API_KEY is not set. API requests will fail until you set it.');
+  }
+
+  json(res, 200, buildRuntimeConfigResponse());
 }
 
 async function handleGetContext(req, res) {
@@ -533,7 +565,8 @@ async function serveStatic(req, res) {
 async function transcribeAudio(audioBuffer, mimeType, mode, sourceLanguage, contextPrompt = '') {
   const normalizedMime = normalizeAudioMimeType(mimeType);
   const ext = mimeToExt(normalizedMime);
-  const model = TRANSCRIBE_MODELS[mode];
+  const model =
+    mode === 'high_accuracy' ? runtimeConfig.openaiTranscribeHighModel : runtimeConfig.openaiTranscribeLowModel;
 
   const form = new FormData();
   form.append('model', model);
@@ -545,10 +578,10 @@ async function transcribeAudio(audioBuffer, mimeType, mode, sourceLanguage, cont
   }
   form.append('file', new Blob([audioBuffer], { type: normalizedMime }), `chunk.${ext}`);
 
-  const response = await fetch(`${OPENAI_BASE_URL}/audio/transcriptions`, {
+  const response = await fetch(`${runtimeConfig.openaiBaseUrl}/audio/transcriptions`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${OPENAI_API_KEY}`
+      Authorization: `Bearer ${runtimeConfig.openaiApiKey}`
     },
     body: form
   });
@@ -615,14 +648,14 @@ async function translateText(text, options) {
           .join('\n\n')
       : '';
 
-  const response = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
+  const response = await fetch(`${runtimeConfig.openaiBaseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${OPENAI_API_KEY}`,
+      Authorization: `Bearer ${runtimeConfig.openaiApiKey}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      model: OPENAI_TRANSLATION_MODEL,
+      model: runtimeConfig.openaiTranslationModel,
       temperature,
       messages: [
         {
@@ -851,7 +884,7 @@ async function loadPersistedContextEmbeddings() {
   const items = parsed.items;
   if (!items || typeof items !== 'object') return;
   contextEmbeddingsStore = {
-    model: String(parsed.model || OPENAI_EMBEDDING_MODEL),
+    model: String(parsed.model || runtimeConfig.openaiEmbeddingModel),
     dimensions: Number(parsed.dimensions || CONTEXT_EMBEDDING_DIMENSIONS),
     items
   };
@@ -868,7 +901,7 @@ async function createEmbeddings(inputs) {
     : [];
   if (list.length === 0) return [];
 
-  if (!OPENAI_API_KEY) {
+  if (!runtimeConfig.openaiApiKey) {
     throw new Error('OPENAI_API_KEY is not configured for embeddings.');
   }
 
@@ -876,16 +909,16 @@ async function createEmbeddings(inputs) {
   for (let i = 0; i < list.length; i += CONTEXT_EMBEDDING_BATCH_SIZE) {
     const batch = list.slice(i, i + CONTEXT_EMBEDDING_BATCH_SIZE);
     const payload = {
-      model: OPENAI_EMBEDDING_MODEL,
+      model: runtimeConfig.openaiEmbeddingModel,
       input: batch
     };
-    if (OPENAI_EMBEDDING_MODEL.startsWith('text-embedding-3')) {
+    if (runtimeConfig.openaiEmbeddingModel.startsWith('text-embedding-3')) {
       payload.dimensions = CONTEXT_EMBEDDING_DIMENSIONS;
     }
-    const response = await fetch(`${OPENAI_BASE_URL}/embeddings`, {
+    const response = await fetch(`${runtimeConfig.openaiBaseUrl}/embeddings`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        Authorization: `Bearer ${runtimeConfig.openaiApiKey}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(payload)
@@ -905,7 +938,7 @@ async function createEmbeddings(inputs) {
 
 function createEmptyContextEmbeddingsStore() {
   return {
-    model: OPENAI_EMBEDDING_MODEL,
+    model: runtimeConfig.openaiEmbeddingModel,
     dimensions: CONTEXT_EMBEDDING_DIMENSIONS,
     items: {}
   };
@@ -1398,6 +1431,113 @@ function normalizeContextMimeType(fileName, mimeType) {
   if (CONTEXT_MIME_BY_EXT[ext]) return CONTEXT_MIME_BY_EXT[ext];
   if (mimeType) return String(mimeType).toLowerCase();
   return 'application/octet-stream';
+}
+
+function createRuntimeConfigFromEnv() {
+  return {
+    openaiApiKey: normalizeApiKey(process.env.OPENAI_API_KEY),
+    openaiBaseUrl: normalizeBaseUrl(process.env.OPENAI_BASE_URL, DEFAULT_RUNTIME_CONFIG.openaiBaseUrl),
+    openaiTranslationModel: normalizeModelName(
+      process.env.OPENAI_TRANSLATION_MODEL,
+      DEFAULT_RUNTIME_CONFIG.openaiTranslationModel
+    ),
+    openaiEmbeddingModel: normalizeModelName(
+      process.env.OPENAI_EMBEDDING_MODEL,
+      DEFAULT_RUNTIME_CONFIG.openaiEmbeddingModel
+    ),
+    openaiTranscribeLowModel: normalizeModelName(
+      process.env.OPENAI_TRANSCRIBE_LOW_MODEL,
+      DEFAULT_RUNTIME_CONFIG.openaiTranscribeLowModel
+    ),
+    openaiTranscribeHighModel: normalizeModelName(
+      process.env.OPENAI_TRANSCRIBE_HIGH_MODEL,
+      DEFAULT_RUNTIME_CONFIG.openaiTranscribeHighModel
+    )
+  };
+}
+
+async function loadPersistedRuntimeConfig() {
+  if (!existsSync(RUNTIME_CONFIG_FILE)) return;
+
+  const raw = await readFile(RUNTIME_CONFIG_FILE, 'utf8');
+  const parsed = JSON.parse(raw);
+  runtimeConfig = applyRuntimeConfigPatch(parsed);
+}
+
+async function persistRuntimeConfig() {
+  const payload = JSON.stringify(
+    {
+      openaiApiKey: runtimeConfig.openaiApiKey,
+      openaiBaseUrl: runtimeConfig.openaiBaseUrl,
+      openaiTranslationModel: runtimeConfig.openaiTranslationModel,
+      openaiEmbeddingModel: runtimeConfig.openaiEmbeddingModel,
+      openaiTranscribeLowModel: runtimeConfig.openaiTranscribeLowModel,
+      openaiTranscribeHighModel: runtimeConfig.openaiTranscribeHighModel
+    },
+    null,
+    2
+  );
+  await writeFile(RUNTIME_CONFIG_FILE, payload, 'utf8');
+}
+
+function applyRuntimeConfigPatch(patch) {
+  const value = patch && typeof patch === 'object' ? patch : {};
+  const has = (key) => Object.prototype.hasOwnProperty.call(value, key);
+
+  return {
+    openaiApiKey: has('openaiApiKey') ? normalizeApiKey(value.openaiApiKey) : runtimeConfig.openaiApiKey,
+    openaiBaseUrl: has('openaiBaseUrl')
+      ? normalizeBaseUrl(value.openaiBaseUrl, DEFAULT_RUNTIME_CONFIG.openaiBaseUrl)
+      : runtimeConfig.openaiBaseUrl,
+    openaiTranslationModel: has('openaiTranslationModel')
+      ? normalizeModelName(value.openaiTranslationModel, DEFAULT_RUNTIME_CONFIG.openaiTranslationModel)
+      : runtimeConfig.openaiTranslationModel,
+    openaiEmbeddingModel: has('openaiEmbeddingModel')
+      ? normalizeModelName(value.openaiEmbeddingModel, DEFAULT_RUNTIME_CONFIG.openaiEmbeddingModel)
+      : runtimeConfig.openaiEmbeddingModel,
+    openaiTranscribeLowModel: has('openaiTranscribeLowModel')
+      ? normalizeModelName(value.openaiTranscribeLowModel, DEFAULT_RUNTIME_CONFIG.openaiTranscribeLowModel)
+      : runtimeConfig.openaiTranscribeLowModel,
+    openaiTranscribeHighModel: has('openaiTranscribeHighModel')
+      ? normalizeModelName(value.openaiTranscribeHighModel, DEFAULT_RUNTIME_CONFIG.openaiTranscribeHighModel)
+      : runtimeConfig.openaiTranscribeHighModel
+  };
+}
+
+function buildRuntimeConfigResponse() {
+  return {
+    hasOpenaiApiKey: Boolean(runtimeConfig.openaiApiKey),
+    openaiApiKeyMasked: maskSecret(runtimeConfig.openaiApiKey),
+    openaiBaseUrl: runtimeConfig.openaiBaseUrl,
+    openaiTranslationModel: runtimeConfig.openaiTranslationModel,
+    openaiEmbeddingModel: runtimeConfig.openaiEmbeddingModel,
+    openaiTranscribeLowModel: runtimeConfig.openaiTranscribeLowModel,
+    openaiTranscribeHighModel: runtimeConfig.openaiTranscribeHighModel
+  };
+}
+
+function normalizeApiKey(value) {
+  return String(value || '').trim();
+}
+
+function normalizeBaseUrl(value, fallback) {
+  const text = String(value || '').trim();
+  if (!text) return fallback;
+  return text.replace(/\/+$/g, '');
+}
+
+function normalizeModelName(value, fallback) {
+  const text = String(value || '').trim();
+  return text || fallback;
+}
+
+function maskSecret(secret) {
+  const text = String(secret || '').trim();
+  if (!text) return '';
+  if (text.length <= 8) {
+    return `${text.slice(0, 2)}...${text.slice(-1)}`;
+  }
+  return `${text.slice(0, 4)}...${text.slice(-4)}`;
 }
 
 async function appendHistory(record) {

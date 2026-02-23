@@ -86,6 +86,41 @@
     </section>
 
     <section class="settings-panel">
+      <h2>API設定</h2>
+      <div class="settings-grid">
+        <label>
+          OpenAI API Key
+          <input id="openaiApiKey" type="password" autocomplete="off" placeholder="sk-..." />
+        </label>
+        <label>
+          OpenAI Base URL
+          <input id="openaiBaseUrl" type="text" placeholder="https://api.openai.com/v1" />
+        </label>
+        <label>
+          翻訳モデル
+          <input id="openaiTranslationModel" type="text" placeholder="gpt-4.1-mini" />
+        </label>
+        <label>
+          埋め込みモデル
+          <input id="openaiEmbeddingModel" type="text" placeholder="text-embedding-3-small" />
+        </label>
+        <label>
+          音声認識モデル（低遅延）
+          <input id="openaiTranscribeLowModel" type="text" placeholder="gpt-4o-mini-transcribe" />
+        </label>
+        <label>
+          音声認識モデル（高精度）
+          <input id="openaiTranscribeHighModel" type="text" placeholder="gpt-4o-transcribe" />
+        </label>
+      </div>
+      <div class="context-actions">
+        <button id="saveApiConfigBtn" type="button">API設定を保存</button>
+        <button id="clearApiKeyBtn" type="button">API Keyを削除</button>
+      </div>
+      <p id="apiConfigStatus" class="context-status">読み込み中...</p>
+    </section>
+
+    <section class="settings-panel">
       <h2>チューニング</h2>
       <div class="settings-grid">
         <label>

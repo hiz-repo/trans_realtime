@@ -94,6 +94,8 @@ label {
 select,
 button,
 input[type="number"],
+input[type="text"],
+input[type="password"],
 input[type="file"] {
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -105,6 +107,8 @@ input[type="file"] {
 
 select,
 input[type="number"],
+input[type="text"],
+input[type="password"],
 input[type="file"] {
   min-height: 40px;
 }
@@ -112,6 +116,8 @@ input[type="file"] {
 select:focus-visible,
 button:focus-visible,
 input[type="number"]:focus-visible,
+input[type="text"]:focus-visible,
+input[type="password"]:focus-visible,
 input[type="file"]:focus-visible,
 input[type="checkbox"]:focus-visible {
   outline: 2px solid var(--focus);

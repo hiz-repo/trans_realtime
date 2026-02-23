@@ -21,6 +21,15 @@ const glossaryNotesEl = document.getElementById('glossaryNotes');
 const addGlossaryBtn = document.getElementById('addGlossaryBtn');
 const glossaryStatusEl = document.getElementById('glossaryStatus');
 const glossaryListEl = document.getElementById('glossaryList');
+const openaiApiKeyInput = document.getElementById('openaiApiKey');
+const openaiBaseUrlInput = document.getElementById('openaiBaseUrl');
+const openaiTranslationModelInput = document.getElementById('openaiTranslationModel');
+const openaiEmbeddingModelInput = document.getElementById('openaiEmbeddingModel');
+const openaiTranscribeLowModelInput = document.getElementById('openaiTranscribeLowModel');
+const openaiTranscribeHighModelInput = document.getElementById('openaiTranscribeHighModel');
+const saveApiConfigBtn = document.getElementById('saveApiConfigBtn');
+const clearApiKeyBtn = document.getElementById('clearApiKeyBtn');
+const apiConfigStatusEl = document.getElementById('apiConfigStatus');
 const micStatusTextEl = document.getElementById('micStatusText');
 const micLevelBarEl = document.getElementById('micLevelBar');
 const overlayEl = document.getElementById('subtitleOverlay');
@@ -128,6 +137,7 @@ let contextPreviewEnd = 0;
 let contextPreviewTotal = 0;
 let isContextPreviewOpen = false;
 let glossaryItems = [];
+let runtimeConfigMeta = null;
 
 let audioContext = null;
 let analyserNode = null;
@@ -151,9 +161,11 @@ initSettings();
 initOverlayMode();
 bindContextActions();
 bindGlossaryActions();
+bindRuntimeConfigActions();
 void loadContextState();
 void loadGlossary();
 void loadHistory();
+void loadRuntimeConfig();
 
 async function startRecording() {
   if (isRecording) return;
@@ -912,6 +924,148 @@ function bindGlossaryActions() {
     event.preventDefault();
     await addGlossaryEntry();
   });
+}
+
+function bindRuntimeConfigActions() {
+  if (!saveApiConfigBtn || !clearApiKeyBtn) return;
+
+  saveApiConfigBtn.addEventListener('click', async () => {
+    await saveRuntimeConfig();
+  });
+
+  clearApiKeyBtn.addEventListener('click', async () => {
+    await clearRuntimeApiKey();
+  });
+
+  const textInputs = [
+    openaiApiKeyInput,
+    openaiBaseUrlInput,
+    openaiTranslationModelInput,
+    openaiEmbeddingModelInput,
+    openaiTranscribeLowModelInput,
+    openaiTranscribeHighModelInput
+  ];
+  for (const input of textInputs) {
+    input?.addEventListener('keydown', async (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      await saveRuntimeConfig();
+    });
+  }
+}
+
+async function loadRuntimeConfig() {
+  if (!apiConfigStatusEl) return;
+
+  try {
+    const response = await fetch('/api/runtime-config');
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`runtime config API error ${response.status}: ${body}`);
+    }
+    const data = await response.json();
+    applyRuntimeConfigToForm(data);
+  } catch (error) {
+    console.error(error);
+    apiConfigStatusEl.textContent = `API設定取得失敗: ${error.message}`;
+  }
+}
+
+async function saveRuntimeConfig() {
+  if (!saveApiConfigBtn || !clearApiKeyBtn) return;
+
+  saveApiConfigBtn.disabled = true;
+  clearApiKeyBtn.disabled = true;
+
+  try {
+    const payload = {
+      openaiBaseUrl: openaiBaseUrlInput.value.trim(),
+      openaiTranslationModel: openaiTranslationModelInput.value.trim(),
+      openaiEmbeddingModel: openaiEmbeddingModelInput.value.trim(),
+      openaiTranscribeLowModel: openaiTranscribeLowModelInput.value.trim(),
+      openaiTranscribeHighModel: openaiTranscribeHighModelInput.value.trim()
+    };
+    const keyInput = openaiApiKeyInput.value.trim();
+    if (keyInput) {
+      payload.openaiApiKey = keyInput;
+    }
+
+    const response = await fetch('/api/runtime-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`runtime config save failed ${response.status}: ${body}`);
+    }
+    const data = await response.json();
+    applyRuntimeConfigToForm(data);
+    setStatus('API設定を保存しました');
+  } catch (error) {
+    console.error(error);
+    apiConfigStatusEl.textContent = `API設定保存失敗: ${error.message}`;
+  } finally {
+    saveApiConfigBtn.disabled = false;
+    clearApiKeyBtn.disabled = !Boolean(runtimeConfigMeta?.hasOpenaiApiKey);
+  }
+}
+
+async function clearRuntimeApiKey() {
+  if (!saveApiConfigBtn || !clearApiKeyBtn) return;
+
+  saveApiConfigBtn.disabled = true;
+  clearApiKeyBtn.disabled = true;
+
+  try {
+    const response = await fetch('/api/runtime-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ openaiApiKey: '' })
+    });
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`runtime api key clear failed ${response.status}: ${body}`);
+    }
+    const data = await response.json();
+    applyRuntimeConfigToForm(data);
+    setStatus('API Keyを削除しました');
+  } catch (error) {
+    console.error(error);
+    apiConfigStatusEl.textContent = `API Key削除失敗: ${error.message}`;
+  } finally {
+    saveApiConfigBtn.disabled = false;
+    clearApiKeyBtn.disabled = !Boolean(runtimeConfigMeta?.hasOpenaiApiKey);
+  }
+}
+
+function applyRuntimeConfigToForm(data) {
+  runtimeConfigMeta = data || null;
+  openaiBaseUrlInput.value = String(data?.openaiBaseUrl || '');
+  openaiTranslationModelInput.value = String(data?.openaiTranslationModel || '');
+  openaiEmbeddingModelInput.value = String(data?.openaiEmbeddingModel || '');
+  openaiTranscribeLowModelInput.value = String(data?.openaiTranscribeLowModel || '');
+  openaiTranscribeHighModelInput.value = String(data?.openaiTranscribeHighModel || '');
+  openaiApiKeyInput.value = '';
+
+  const masked = String(data?.openaiApiKeyMasked || '').trim();
+  if (data?.hasOpenaiApiKey) {
+    openaiApiKeyInput.placeholder = masked ? `設定済み: ${masked}` : '設定済み';
+  } else {
+    openaiApiKeyInput.placeholder = '未設定 (sk-...)';
+  }
+
+  clearApiKeyBtn.disabled = !Boolean(data?.hasOpenaiApiKey);
+  renderRuntimeConfigStatus(data);
+}
+
+function renderRuntimeConfigStatus(data) {
+  if (!apiConfigStatusEl) return;
+
+  const keyStatus = data?.hasOpenaiApiKey ? '設定済み' : '未設定';
+  const model = String(data?.openaiTranslationModel || '-');
+  const baseUrl = String(data?.openaiBaseUrl || '-');
+  apiConfigStatusEl.textContent = `API Key: ${keyStatus} / Base URL: ${baseUrl} / 翻訳モデル: ${model}`;
 }
 
 async function loadGlossary() {
