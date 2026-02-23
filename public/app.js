@@ -88,11 +88,11 @@ const settingInputIds = {
 
 const DEFAULT_TUNING_SETTINGS = Object.freeze({
   segmentMsLow: 1800,
-  segmentMsHigh: 4200,
+  segmentMsHigh: 5200,
   flushCharsLow: 38,
-  flushCharsHigh: 64,
+  flushCharsHigh: 88,
   flushHoldLowMs: 5400,
-  flushHoldHighMs: 9000
+  flushHoldHighMs: 12000
 });
 
 const settings = {
@@ -473,22 +473,29 @@ function shouldFlushTranscript(mode, latestPiece, force) {
   const minChars = mode === 'high_accuracy' ? settings.flushCharsHigh : settings.flushCharsLow;
   const maxHoldMs = mode === 'high_accuracy' ? settings.flushHoldHighMs : settings.flushHoldLowMs;
   const silenceMs = lastSpeechDetectedAt > 0 ? Date.now() - lastSpeechDetectedAt : 0;
-  const silenceFlushMs = mode === 'high_accuracy' ? 1300 : 900;
+  const sentenceSilenceMs = mode === 'high_accuracy' ? 360 : 260;
+  const clauseSilenceMs = mode === 'high_accuracy' ? 820 : 620;
+  const longSilenceFlushMs = mode === 'high_accuracy' ? 1800 : 1050;
+  const latestText = (latestPiece || text).trim();
+  const sentenceEnded = SENTENCE_END_RE.test(latestText) || SENTENCE_END_RE.test(text);
+  const clauseEnded = CLAUSE_END_RE.test(latestText) || CLAUSE_END_RE.test(text);
+  const endsWithConnector = TRAILING_CONNECTOR_RE.test(text);
 
-  if (SENTENCE_END_RE.test(latestPiece || '') || SENTENCE_END_RE.test(text)) {
+  if (sentenceEnded && silenceMs >= sentenceSilenceMs) {
     return true;
   }
-  const latestText = (latestPiece || text).trim();
+  if (sentenceEnded && text.length >= Math.round(minChars * 0.72)) {
+    return true;
+  }
+
   if (text.length >= minChars) {
-    const hardLimit = Math.round(minChars * 1.85);
-    const hasClauseBoundary = CLAUSE_END_RE.test(latestText);
-    const endsWithConnector = TRAILING_CONNECTOR_RE.test(text);
+    const hardLimit = Math.round(minChars * (mode === 'high_accuracy' ? 2.15 : 1.9));
 
     if (text.length >= hardLimit) return true;
-    if (!endsWithConnector && hasClauseBoundary && text.length >= Math.round(minChars * 0.85)) {
+    if (!endsWithConnector && clauseEnded && silenceMs >= clauseSilenceMs) {
       return true;
     }
-    if (!endsWithConnector && silenceMs >= silenceFlushMs) {
+    if (!endsWithConnector && silenceMs >= longSilenceFlushMs) {
       return true;
     }
   }
