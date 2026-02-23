@@ -87,119 +87,130 @@
 
     <section class="settings-panel">
       <h2>API設定</h2>
-      <div class="settings-grid">
-        <label>
+      <div class="api-config-top">
+        <label class="api-key-field">
           OpenAI API Key
           <input id="openaiApiKey" type="password" autocomplete="off" placeholder="sk-..." />
         </label>
-        <label>
-          OpenAI Base URL
-          <input id="openaiBaseUrl" type="text" placeholder="https://api.openai.com/v1" />
-        </label>
-        <label>
-          翻訳モデル
-          <input id="openaiTranslationModel" type="text" placeholder="gpt-4.1-mini" />
-        </label>
-        <label>
-          埋め込みモデル
-          <input id="openaiEmbeddingModel" type="text" placeholder="text-embedding-3-small" />
-        </label>
-        <label>
-          音声認識モデル（低遅延）
-          <input id="openaiTranscribeLowModel" type="text" placeholder="gpt-4o-mini-transcribe" />
-        </label>
-        <label>
-          音声認識モデル（高精度）
-          <input id="openaiTranscribeHighModel" type="text" placeholder="gpt-4o-transcribe" />
-        </label>
+        <div class="api-config-actions">
+          <button id="saveApiConfigBtn" type="button">API設定を保存</button>
+          <button id="clearApiKeyBtn" type="button">API Keyを削除</button>
+        </div>
       </div>
-      <div class="context-actions">
-        <button id="saveApiConfigBtn" type="button">API設定を保存</button>
-        <button id="clearApiKeyBtn" type="button">API Keyを削除</button>
-      </div>
+      <details class="settings-collapse">
+        <summary>詳細設定（Base URL / モデル）</summary>
+        <div class="settings-grid api-settings-grid">
+          <label>
+            OpenAI Base URL
+            <input id="openaiBaseUrl" type="text" placeholder="https://api.openai.com/v1" />
+          </label>
+          <label>
+            翻訳モデル
+            <input id="openaiTranslationModel" type="text" placeholder="gpt-4.1-mini" />
+          </label>
+          <label>
+            埋め込みモデル
+            <input id="openaiEmbeddingModel" type="text" placeholder="text-embedding-3-small" />
+          </label>
+          <label>
+            音声認識モデル（低遅延）
+            <input id="openaiTranscribeLowModel" type="text" placeholder="gpt-4o-mini-transcribe" />
+          </label>
+          <label>
+            音声認識モデル（高精度）
+            <input id="openaiTranscribeHighModel" type="text" placeholder="gpt-4o-transcribe" />
+          </label>
+        </div>
+      </details>
       <p id="apiConfigStatus" class="context-status">読み込み中...</p>
     </section>
 
     <section class="settings-panel">
       <h2>チューニング</h2>
-      <div class="settings-grid">
-        <label>
-          低遅延 セグメント(ms)
-          <input id="segLowMs" type="number" min="700" max="5000" step="100" value="1800" />
-        </label>
-        <label>
-          高精度 セグメント(ms)
-          <input id="segHighMs" type="number" min="1500" max="9000" step="100" value="4200" />
-        </label>
-        <label>
-          低遅延 flush最小文字数
-          <input id="flushCharsLow" type="number" min="12" max="180" step="1" value="38" />
-        </label>
-        <label>
-          高精度 flush最小文字数
-          <input id="flushCharsHigh" type="number" min="12" max="260" step="1" value="64" />
-        </label>
-        <label>
-          低遅延 flush最大待機(ms)
-          <input id="flushHoldLowMs" type="number" min="1200" max="14000" step="100" value="5400" />
-        </label>
-        <label>
-          高精度 flush最大待機(ms)
-          <input id="flushHoldHighMs" type="number" min="1800" max="18000" step="100" value="9000" />
-        </label>
-        <label>
-          ノイズゲート閾値
-          <input id="noiseThreshold" type="range" min="0.005" max="0.08" step="0.001" value="0.016" />
-          <span id="noiseThresholdValue" class="value-badge">0.016</span>
-        </label>
-        <label>
-          最小音声検出(ms)
-          <input id="noiseMinVoiceMs" type="number" min="40" max="1200" step="10" value="180" />
-        </label>
-        <label class="checkbox-row">
-          <input id="ignoreFillers" type="checkbox" checked />
-          フィラーを除去
-        </label>
-        <label class="checkbox-row">
-          <input id="useContextTranscription" type="checkbox" checked />
-          contextを音声認識に利用
-        </label>
-        <label class="checkbox-row">
-          <input id="useContextTranslation" type="checkbox" checked />
-          contextを翻訳に利用
-        </label>
-      </div>
+      <details class="settings-collapse">
+        <summary>詳細設定を表示</summary>
+        <div class="settings-grid">
+          <label>
+            低遅延 セグメント(ms)
+            <input id="segLowMs" type="number" min="700" max="5000" step="100" value="1800" />
+          </label>
+          <label>
+            高精度 セグメント(ms)
+            <input id="segHighMs" type="number" min="1500" max="9000" step="100" value="4200" />
+          </label>
+          <label>
+            低遅延 flush最小文字数
+            <input id="flushCharsLow" type="number" min="12" max="180" step="1" value="38" />
+          </label>
+          <label>
+            高精度 flush最小文字数
+            <input id="flushCharsHigh" type="number" min="12" max="260" step="1" value="64" />
+          </label>
+          <label>
+            低遅延 flush最大待機(ms)
+            <input id="flushHoldLowMs" type="number" min="1200" max="14000" step="100" value="5400" />
+          </label>
+          <label>
+            高精度 flush最大待機(ms)
+            <input id="flushHoldHighMs" type="number" min="1800" max="18000" step="100" value="9000" />
+          </label>
+          <label>
+            ノイズゲート閾値
+            <input id="noiseThreshold" type="range" min="0.005" max="0.08" step="0.001" value="0.016" />
+            <span id="noiseThresholdValue" class="value-badge">0.016</span>
+          </label>
+          <label>
+            最小音声検出(ms)
+            <input id="noiseMinVoiceMs" type="number" min="40" max="1200" step="10" value="180" />
+          </label>
+          <label class="checkbox-row">
+            <input id="ignoreFillers" type="checkbox" checked />
+            フィラーを除去
+          </label>
+          <label class="checkbox-row">
+            <input id="useContextTranscription" type="checkbox" checked />
+            contextを音声認識に利用
+          </label>
+          <label class="checkbox-row">
+            <input id="useContextTranslation" type="checkbox" checked />
+            contextを翻訳に利用
+          </label>
+        </div>
+      </details>
     </section>
 
     <section class="settings-panel">
       <h2>オーバーレイ表示</h2>
-      <div class="settings-grid">
-        <label>
-          文字サイズ(px)
-          <input id="overlayFontSize" type="number" min="14" max="96" step="1" value="32" />
-        </label>
-        <label>
-          下オフセット(px)
-          <input id="overlayBottom" type="number" min="0" max="200" step="1" value="14" />
-        </label>
-        <label>
-          文字色
-          <input id="overlayTextColor" type="color" value="#ffffff" />
-        </label>
-        <label>
-          背景色
-          <input id="overlayBgColor" type="color" value="#000000" />
-        </label>
-        <label>
-          背景不透明度
-          <input id="overlayBgOpacity" type="range" min="0.2" max="1" step="0.01" value="0.78" />
-          <span id="overlayBgOpacityValue" class="value-badge">0.78</span>
-        </label>
-        <label>
-          角丸(px)
-          <input id="overlayRadius" type="number" min="0" max="40" step="1" value="10" />
-        </label>
-      </div>
+      <details class="settings-collapse">
+        <summary>表示スタイル設定を表示</summary>
+        <div class="settings-grid">
+          <label>
+            文字サイズ(px)
+            <input id="overlayFontSize" type="number" min="14" max="96" step="1" value="32" />
+          </label>
+          <label>
+            下オフセット(px)
+            <input id="overlayBottom" type="number" min="0" max="200" step="1" value="14" />
+          </label>
+          <label>
+            文字色
+            <input id="overlayTextColor" type="color" value="#ffffff" />
+          </label>
+          <label>
+            背景色
+            <input id="overlayBgColor" type="color" value="#000000" />
+          </label>
+          <label>
+            背景不透明度
+            <input id="overlayBgOpacity" type="range" min="0.2" max="1" step="0.01" value="0.78" />
+            <span id="overlayBgOpacityValue" class="value-badge">0.78</span>
+          </label>
+          <label>
+            角丸(px)
+            <input id="overlayRadius" type="number" min="0" max="40" step="1" value="10" />
+          </label>
+        </div>
+      </details>
     </section>
 
     <section class="history-panel">

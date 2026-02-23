@@ -215,6 +215,88 @@ button:disabled {
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
 }
 
+.api-config-top {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.api-key-field {
+  flex: 1 1 320px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 13px;
+  color: #273245;
+}
+
+.api-key-field input {
+  width: 100%;
+}
+
+.api-config-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.api-config-actions button {
+  min-height: 40px;
+}
+
+.settings-collapse {
+  margin-top: 10px;
+  border: 1px solid #d7e0ec;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f9fbff 0%, #f3f8ff 100%);
+}
+
+.settings-collapse > summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 12px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #334155;
+}
+
+.settings-collapse > summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-collapse > summary::after {
+  content: "＋";
+  font-size: 16px;
+  line-height: 1;
+  color: #0f766e;
+}
+
+.settings-collapse[open] > summary {
+  border-bottom: 1px solid #d7e0ec;
+}
+
+.settings-collapse[open] > summary::after {
+  content: "−";
+}
+
+.settings-collapse > .settings-grid {
+  padding: 12px;
+}
+
+.api-settings-grid {
+  padding-top: 0;
+}
+
 .context-actions {
   display: flex;
   gap: 8px;
@@ -353,6 +435,12 @@ button:disabled {
 @media (max-width: 920px) {
   .glossary-form {
     grid-template-columns: 1fr;
+  }
+
+  .api-config-actions {
+    width: 100%;
+    justify-content: flex-start;
+    margin-left: 0;
   }
 }
 
