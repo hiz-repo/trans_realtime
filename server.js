@@ -166,8 +166,18 @@ export async function startServer(options = {}) {
         return;
       }
 
+      if (req.method === 'GET' && req.url?.startsWith('/api/history/export')) {
+        await handleExportHistory(res);
+        return;
+      }
+
       if (req.method === 'GET' && req.url?.startsWith('/api/history')) {
         await handleHistory(req, res, port);
+        return;
+      }
+
+      if (req.method === 'DELETE' && req.url?.startsWith('/api/history')) {
+        await handleDeleteHistory(res);
         return;
       }
 
@@ -520,12 +530,38 @@ async function handleHistory(req, res, port) {
   }
 
   const content = await readFile(HISTORY_FILE, 'utf8');
-  const lines = content
-    .split('\n')
-    .filter(Boolean)
-    .slice(-limit);
+  const items = parseHistoryItemsFromJsonl(content, limit);
 
-  const items = lines
+  json(res, 200, { items });
+}
+
+async function handleExportHistory(res) {
+  const content = existsSync(HISTORY_FILE) ? await readFile(HISTORY_FILE, 'utf8') : '';
+  const items = parseHistoryItemsFromJsonl(content);
+  const vtt = buildHistoryVtt(items);
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const fileName = `conversation_history_${stamp}.vtt`;
+
+  res.writeHead(200, {
+    'Content-Type': 'text/vtt; charset=utf-8',
+    'Content-Disposition': `attachment; filename="${fileName}"`,
+    'Cache-Control': 'no-store'
+  });
+  res.end(vtt);
+}
+
+async function handleDeleteHistory(res) {
+  await writeFile(HISTORY_FILE, '', 'utf8');
+  json(res, 200, { items: [] });
+}
+
+function parseHistoryItemsFromJsonl(content, limit = Number.POSITIVE_INFINITY) {
+  const lines = String(content || '')
+    .split('\n')
+    .filter(Boolean);
+
+  const capped = Number.isFinite(limit) ? lines.slice(-Math.max(1, Math.floor(limit))) : lines;
+  return capped
     .map((line) => {
       try {
         return JSON.parse(line);
@@ -534,8 +570,80 @@ async function handleHistory(req, res, port) {
       }
     })
     .filter(Boolean);
+}
 
-  json(res, 200, { items });
+function buildHistoryVtt(items) {
+  const rows = Array.isArray(items) ? items : [];
+  if (rows.length === 0) {
+    return 'WEBVTT\n\n';
+  }
+
+  const timePoints = rows.map((item) => {
+    const ms = Date.parse(String(item?.createdAt || ''));
+    return Number.isFinite(ms) ? ms : null;
+  });
+  const firstValid = timePoints.find((x) => x != null);
+  const baseMs = firstValid == null ? null : firstValid;
+
+  const cues = [];
+  let lastEndMs = 0;
+  for (let i = 0; i < rows.length; i += 1) {
+    const text = normalizeVttCueText(rows[i]);
+    if (!text) continue;
+
+    const startMs = resolveCueStartMs(i, timePoints, baseMs, lastEndMs, cues.length === 0);
+    const endMs = resolveCueEndMs(i, startMs, timePoints, baseMs, text);
+    cues.push(`${formatVttTimestamp(startMs)} --> ${formatVttTimestamp(endMs)}\n${text}`);
+    lastEndMs = endMs;
+  }
+
+  return `WEBVTT\n\n${cues.join('\n\n')}\n`;
+}
+
+function resolveCueStartMs(index, timePoints, baseMs, lastEndMs, isFirst) {
+  const current = timePoints[index];
+  if (current != null && baseMs != null) {
+    return Math.max(0, current - baseMs);
+  }
+  if (isFirst) return 0;
+  return Math.max(0, Number(lastEndMs) || 0);
+}
+
+function resolveCueEndMs(index, startMs, timePoints, baseMs, text) {
+  const next = timePoints[index + 1];
+  if (next != null && baseMs != null) {
+    const nextStart = Math.max(0, next - baseMs);
+    if (nextStart > startMs + 240) return nextStart;
+  }
+
+  return startMs + estimateCueDurationMs(text);
+}
+
+function estimateCueDurationMs(text) {
+  const chars = String(text || '').length;
+  const estimated = 1300 + chars * 42;
+  return Math.max(1400, Math.min(7800, estimated));
+}
+
+function normalizeVttCueText(item) {
+  const translation = normalizeVttTextLine(item?.translation);
+  const transcript = normalizeVttTextLine(item?.transcript);
+  return translation || transcript;
+}
+
+function normalizeVttTextLine(value) {
+  return String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function formatVttTimestamp(msRaw) {
+  const ms = Math.max(0, Math.floor(Number(msRaw) || 0));
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  const s = Math.floor((ms % 60000) / 1000);
+  const milli = ms % 1000;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(milli).padStart(3, '0')}`;
 }
 
 async function serveStatic(req, res) {

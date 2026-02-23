@@ -568,6 +568,19 @@ input[type="color"] {
   font-size: 17px;
 }
 
+.history-actions {
+  margin: 0 0 10px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+#clearHistoryBtn {
+  border-color: #efcaca;
+  color: #b42318;
+  background: #fff5f5;
+}
+
 #historyList {
   margin: 0;
   padding: 0;

@@ -34,6 +34,8 @@ const micStatusTextEl = document.getElementById('micStatusText');
 const micLevelBarEl = document.getElementById('micLevelBar');
 const overlayEl = document.getElementById('subtitleOverlay');
 const historyListEl = document.getElementById('historyList');
+const exportHistoryBtn = document.getElementById('exportHistoryBtn');
+const clearHistoryBtn = document.getElementById('clearHistoryBtn');
 const overlayToggleWrap = document.getElementById('overlayToggleWrap');
 const overlayToggle = document.getElementById('overlayToggle');
 const noiseThresholdValueEl = document.getElementById('noiseThresholdValue');
@@ -138,6 +140,7 @@ let contextPreviewTotal = 0;
 let isContextPreviewOpen = false;
 let glossaryItems = [];
 let runtimeConfigMeta = null;
+let historyCount = 0;
 
 let audioContext = null;
 let analyserNode = null;
@@ -162,6 +165,7 @@ initOverlayMode();
 bindContextActions();
 bindGlossaryActions();
 bindRuntimeConfigActions();
+bindHistoryActions();
 void loadContextState();
 void loadGlossary();
 void loadHistory();
@@ -1075,6 +1079,18 @@ function renderRuntimeConfigStatus(data) {
   apiConfigStatusEl.textContent = `API Key: ${keyStatus} / Base URL: ${baseUrl} / 翻訳モデル: ${model}`;
 }
 
+function bindHistoryActions() {
+  exportHistoryBtn?.addEventListener('click', async () => {
+    await exportConversationHistory();
+  });
+
+  clearHistoryBtn?.addEventListener('click', async () => {
+    await clearHistory();
+  });
+
+  updateHistoryActionState();
+}
+
 async function loadGlossary() {
   try {
     const response = await fetch('/api/glossary');
@@ -1232,10 +1248,12 @@ async function loadHistory() {
     const data = await response.json();
     const items = Array.isArray(data.items) ? data.items : [];
     historyListEl.innerHTML = '';
+    historyCount = 0;
 
     items.forEach((item) => {
       prependHistoryItem(item, false);
     });
+    updateHistoryActionState();
   } catch (error) {
     console.error(error);
     setStatus('履歴取得に失敗しました');
@@ -1265,6 +1283,86 @@ function prependHistoryItem(item, enforceMax = true) {
       historyListEl.lastChild?.remove();
     }
   }
+  historyCount = historyListEl.children.length;
+  updateHistoryActionState();
+}
+
+async function exportConversationHistory() {
+  if (!exportHistoryBtn) return;
+
+  exportHistoryBtn.disabled = true;
+  try {
+    const response = await fetch('/api/history/export');
+    if (!response.ok) {
+      throw new Error(`history export failed ${response.status}`);
+    }
+
+    const blob = await response.blob();
+    const nameFromHeader = parseDownloadFileName(response.headers.get('Content-Disposition'));
+    const fallback = `conversation_history_${new Date().toISOString().replace(/[:.]/g, '-')}.vtt`;
+    const fileName = nameFromHeader || fallback;
+    triggerBlobDownload(blob, fileName);
+    setStatus('会話ログをファイル出力しました');
+  } catch (error) {
+    console.error(error);
+    setStatus(`会話ログ出力に失敗: ${error.message}`);
+  } finally {
+    exportHistoryBtn.disabled = false;
+  }
+}
+
+async function clearHistory() {
+  if (!clearHistoryBtn) return;
+  const ok = window.confirm('保存済みの履歴をすべて削除します。よろしいですか？');
+  if (!ok) return;
+
+  clearHistoryBtn.disabled = true;
+  exportHistoryBtn && (exportHistoryBtn.disabled = true);
+
+  try {
+    const response = await fetch('/api/history', { method: 'DELETE' });
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`history clear failed ${response.status}: ${body}`);
+    }
+
+    historyListEl.innerHTML = '';
+    historyCount = 0;
+    updateHistoryActionState();
+    setStatus('履歴をクリアしました');
+  } catch (error) {
+    console.error(error);
+    setStatus(`履歴クリアに失敗: ${error.message}`);
+  } finally {
+    clearHistoryBtn.disabled = false;
+    exportHistoryBtn && (exportHistoryBtn.disabled = false);
+  }
+}
+
+function updateHistoryActionState() {
+  if (clearHistoryBtn) {
+    clearHistoryBtn.disabled = historyCount <= 0;
+  }
+}
+
+function parseDownloadFileName(contentDisposition) {
+  const text = String(contentDisposition || '');
+  if (!text) return '';
+  const m = text.match(/filename="([^"]+)"/i) || text.match(/filename=([^;]+)/i);
+  return m ? m[1].trim() : '';
+}
+
+function triggerBlobDownload(blob, fileName) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => {
+    URL.revokeObjectURL(url);
+  }, 0);
 }
 
 function publishSubtitle(text) {

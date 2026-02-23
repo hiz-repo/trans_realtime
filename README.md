@@ -95,6 +95,10 @@ npm start
   - 出力: 指定context削除後のサマリー
 - `GET /api/history?limit=100`
   - 出力: `{ items: [...] }`
+- `GET /api/history/export`
+  - 出力: 会話ログの `WebVTT (.vtt)` ファイル（ダウンロード用）
+- `DELETE /api/history`
+  - 出力: `{ items: [] }`（履歴全削除）
 - `GET /api/glossary`
   - 出力: `{ totalCount, activeCount, items }`
 - `POST /api/glossary`
