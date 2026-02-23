@@ -25,7 +25,11 @@ const CONTEXT_PREVIEW_MAX_LIMIT = 12000;
 const CONTEXT_EMBEDDING_BATCH_SIZE = 32;
 const CONTEXT_EMBEDDING_DIMENSIONS = 512;
 const GLOSSARY_MAX_ITEMS = 400;
-const RECENT_TRANSLATION_MAX = 8;
+const RECENT_TRANSLATION_MAX = 24;
+const RECENT_TRANSLATION_LIMIT_LOW = 6;
+const RECENT_TRANSLATION_LIMIT_HIGH = 10;
+const RECENT_TRANSLATION_ITEM_CHAR_LIMIT = 220;
+const RECENT_TRANSLATION_TOTAL_CHAR_LIMIT = 2600;
 const DEFAULT_RUNTIME_CONFIG = Object.freeze({
   openaiApiKey: '',
   openaiBaseUrl: 'https://api.openai.com/v1',
@@ -607,7 +611,8 @@ async function translateText(text, options) {
   const sourceName = LANGUAGE_NAMES[sourceLanguage] || sourceLanguage;
   const targetName = LANGUAGE_NAMES[targetLanguage] || targetLanguage;
   const snippets = useContextForTranslation ? await getRelevantContextSnippets(text, CONTEXT_QUERY_LIMIT) : [];
-  const recentPairs = getRecentTranslationContext(sourceLanguage, targetLanguage, 4);
+  const recentLimit = mode === 'high_accuracy' ? RECENT_TRANSLATION_LIMIT_HIGH : RECENT_TRANSLATION_LIMIT_LOW;
+  const recentPairs = getRecentTranslationContext(sourceLanguage, targetLanguage, recentLimit);
   const glossaryItems = getActiveGlossaryItems().slice(0, 80);
 
   const instructions = [
@@ -643,9 +648,7 @@ async function translateText(text, options) {
       : '';
   const recentBlock =
     recentPairs.length > 0
-      ? recentPairs
-          .map((item, index) => `Recent ${index + 1}\nSource: ${item.transcript}\nTranslation: ${item.translation}`)
-          .join('\n\n')
+      ? buildRecentHistoryBlock(recentPairs)
       : '';
 
   const response = await fetch(`${runtimeConfig.openaiBaseUrl}/chat/completions`, {
@@ -1011,10 +1014,36 @@ function rememberTranslationContext(entry) {
   }
 }
 
-function getRecentTranslationContext(sourceLanguage, targetLanguage, limit = 4) {
+function getRecentTranslationContext(sourceLanguage, targetLanguage, limit = RECENT_TRANSLATION_LIMIT_LOW) {
   return recentTranslationMemory
     .filter((item) => item.sourceLanguage === sourceLanguage && item.targetLanguage === targetLanguage)
     .slice(0, limit);
+}
+
+function buildRecentHistoryBlock(items) {
+  let totalChars = 0;
+  const lines = [];
+
+  for (let i = 0; i < items.length; i += 1) {
+    const source = clampTextLength(items[i]?.transcript, RECENT_TRANSLATION_ITEM_CHAR_LIMIT);
+    const translation = clampTextLength(items[i]?.translation, RECENT_TRANSLATION_ITEM_CHAR_LIMIT);
+    if (!source || !translation) continue;
+
+    const part = `Recent ${i + 1}\nSource: ${source}\nTranslation: ${translation}`;
+    const nextTotal = totalChars + part.length;
+    if (nextTotal > RECENT_TRANSLATION_TOTAL_CHAR_LIMIT) break;
+    lines.push(part);
+    totalChars = nextTotal;
+  }
+
+  return lines.join('\n\n');
+}
+
+function clampTextLength(value, maxChars) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!text) return '';
+  if (text.length <= maxChars) return text;
+  return `${text.slice(0, Math.max(1, maxChars - 1)).trimEnd()}…`;
 }
 
 async function loadPersistedContext() {
